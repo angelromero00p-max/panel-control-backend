@@ -1,0 +1,17 @@
+# Dependencias
+node_modules/
+
+# Base de datos (se creará automáticamente)
+events.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Variables de entorno (usaremos las de Render)
+.env
+.env.local
