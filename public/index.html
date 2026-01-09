@@ -537,7 +537,8 @@
                 const response = await fetch('/api/events');
                 const data = await response.json();
                 
-                allEvents = data.events || [];
+                // Fix: Handle both Array and Object { events: [...] } formats
+                allEvents = Array.isArray(data) ? data : (data.events || []);
                 filteredEvents = [...allEvents];
                 
                 updateStats(filteredEvents);

